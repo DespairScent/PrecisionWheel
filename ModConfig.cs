@@ -14,7 +14,7 @@ namespace DespairScent.PrecisionWheel
         public KeybindList keybind10 = new KeybindList(SButton.LeftShift);
         public KeybindList keybind100 = new KeybindList(SButton.LeftControl);
 
-        public bool keybindInheritance = true;
+        public bool keybindInheritance = false;
 
         public bool reverseWheel = false;
     }

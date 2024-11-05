@@ -1,11 +1,11 @@
 ﻿{
   "Name": "PrecisionWheel",
   "Author": "DespairScent",
-  "Version": "1.1.0",
+  "Version": "1.2.0",
   "Description": "Easily move items between inventories using the mouse wheel",
   "UniqueID": "DespairScent.PrecisionWheel",
   "EntryDll": "PrecisionWheel.dll",
-  "MinimumApiVersion": "4.0.0",
-  "MinimumGameVersion": "1.6.0",
+  "MinimumApiVersion": "4.1.0",
+  "MinimumGameVersion": "1.6.9",
   "UpdateKeys": [ "Nexus:22222" ]
 }

@@ -4,7 +4,6 @@ using StardewValley.Menus;
 using System.Reflection.Emit;
 using StardewModdingAPI.Events;
 using StardewValley;
-using Microsoft.Xna.Framework.Input;
 
 namespace DespairScent.PrecisionWheel
 {
@@ -22,8 +21,8 @@ namespace DespairScent.PrecisionWheel
             var harmony = new Harmony(this.ModManifest.UniqueID);
 
             harmony.Patch(AccessTools.Method(typeof(InventoryMenu), nameof(InventoryMenu.rightClick)),
-               transpiler: new HarmonyMethod(typeof(ModEntry), nameof(SpecialTitlePatch)));
-
+               transpiler: new HarmonyMethod(typeof(ModEntry), nameof(InventoryMenuPatch)));
+            
             helper.Events.Input.MouseWheelScrolled += this.OnWheelScrolled;
             helper.Events.GameLoop.GameLaunched += this.OnGameLaunched;
         }
@@ -107,12 +106,11 @@ namespace DespairScent.PrecisionWheel
                 }
                 else // storage
                 {
-                    hoverItem = itemGrabMenu.ItemsToGrabMenu.getItemAt(Game1.getMouseX(), Game1.getMouseY());
                     if (e.Delta < 0 ^ Config.reverseWheel)
                     {
                         Game1.activeClickableMenu.receiveRightClick(Game1.getMouseX(), Game1.getMouseY());
                     }
-                    else if (hoverItem != null)
+                    else if ((hoverItem = itemGrabMenu.ItemsToGrabMenu.getItemAt(Game1.getMouseX(), Game1.getMouseY())) != null)
                     {
                         PullFromInventory(itemGrabMenu.inventory, hoverItem);
                     }
@@ -140,11 +138,10 @@ namespace DespairScent.PrecisionWheel
         }
 
         // TO-DO: handle (toAddTo != null) block
-        public static IEnumerable<CodeInstruction> SpecialTitlePatch(IEnumerable<CodeInstruction> instructions, ILGenerator generator)
+        public static IEnumerable<CodeInstruction> InventoryMenuPatch(IEnumerable<CodeInstruction> instructions, ILGenerator generator)
         {
             Label? labeltoAddToNull = null;
-            int index_toAddToNull_FirstIf = -1;
-            int index_toAddToNull_LastStackUpdate = -1;
+            int index_toAddToNull_StackUpdate = -1;
 
             var codes = new List<CodeInstruction>(instructions);
             for (int i = 0; i < codes.Count; i++)
@@ -158,53 +155,44 @@ namespace DespairScent.PrecisionWheel
                     break; // end of (toAddTo == null) block
                 }
 
-                if (index_toAddToNull_FirstIf == -1 && codes[i].opcode == OpCodes.Ldsfld && codes[i].operand == AccessTools.Field(typeof(Game1), nameof(Game1.oldKBState)))
+                if (labeltoAddToNull != null && codes[i].opcode == OpCodes.Callvirt && codes[i].operand == AccessTools.PropertySetter(typeof(Item), nameof(Item.Stack)))
                 {
-                    index_toAddToNull_FirstIf = i;
-                }
-                if (codes[i].opcode == OpCodes.Callvirt && codes[i].operand == AccessTools.PropertySetter(typeof(Item), nameof(Item.Stack)))
-                {
-                    index_toAddToNull_LastStackUpdate = i;
+                    index_toAddToNull_StackUpdate = i;
                 }
             }
 
-            if (index_toAddToNull_FirstIf != -1 && index_toAddToNull_LastStackUpdate != -1)
+            if (index_toAddToNull_StackUpdate != -1)
             {
-                var instructionsToInsert = new List<CodeInstruction>();
+                var instructionsToInsert = new List<CodeInstruction>
+                {
+                    new CodeInstruction(OpCodes.Ldarg_0), // (InventoryMenu) this               
+                    new CodeInstruction(OpCodes.Ldloc_1), // (int) index
+                    new CodeInstruction(OpCodes.Ldloc_S, 5), // (Item) newItem
+                    new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(ModEntry), nameof(Patch_rightClick_toAddToNull)))
+                };
 
-                var label_toAddToNull_AfterLastStackUpdate = generator.DefineLabel();
-                codes[index_toAddToNull_LastStackUpdate + 1].labels.Add(label_toAddToNull_AfterLastStackUpdate);
-
-                instructionsToInsert.Add(new CodeInstruction(OpCodes.Ldarg_0)); // (InventoryMenu) this               
-                instructionsToInsert.Add(new CodeInstruction(OpCodes.Ldloc_1)); // (int) index
-                instructionsToInsert.Add(new CodeInstruction(OpCodes.Ldloc_S, 4)); // (Item) one
-
-                instructionsToInsert.Add(new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(ModEntry), nameof(Patch_rightClick_toAddToNull))));
-                instructionsToInsert.Add(new CodeInstruction(OpCodes.Brtrue_S, label_toAddToNull_AfterLastStackUpdate));
-
-                codes.InsertRange(index_toAddToNull_FirstIf, instructionsToInsert);
+                codes.InsertRange(index_toAddToNull_StackUpdate + 1, instructionsToInsert);
             }
 
             return codes.AsEnumerable();
         }
 
-        public static bool Patch_rightClick_toAddToNull(InventoryMenu inventory, int index, Item one)
+        public static void Patch_rightClick_toAddToNull(InventoryMenu inventory, int index, Item newItem)
         {
             if (!movingWithWheel)
             {
-                return false;
+                return;
             }
 
             int count = Math.Min(inventory.actualInventory[index].Stack, GetCountFromKeybins());
             if (count == 0)
             {
-                return false;
+                return;
             }
 
-            one.Stack = count;
-            inventory.actualInventory[index].Stack -= count;
+            newItem.Stack = count;
 
-            return true;
+            return;
         }
 
         private static int GetCountFromKeybins()
